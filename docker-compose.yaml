@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16.2
+    container_name: postgres
+    environment:
+      POSTGRES_DB: "wordpress"
+      POSTGRES_USER: ${user}
+      POSTGRES_PASSWORD: ${pswd}
+    volumes:
+      - ./postgresql/data:/var/lib/postgresql/data
+      #- ./app_logs/postgers/:/var/log/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${user} -d wordpress"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+      #- "127.0.0.1:5433:5432"
+    networks:
+      - app-network
+
+  fastapi:
+    depends_on:
+      - postgres
+    build: ./api
+    container_name: fastapi
+    env_file: .env
+    volumes:
+      - ./api:/data/api
+    ports:
+      - "8000:8000"
+      # - "127.0.0.1:8000:8000"
+    networks:
+      - app-network
+
+  wordpress:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      fastapi:
+        condition: service_started
+    image: wordpress:latest
+    container_name: wordpress
+    # restart: always
+    environment:
+      WORDPRESS_DB_HOST: postgres:5432
+      WORDPRESS_DB_USER: ${user}
+      WORDPRESS_DB_PASSWORD: ${pswd}
+      WORDPRESS_DB_NAME: wordpress
+    # volumes:
+    #   - ./wordpress:/var/www/html
+    ports:
+      - "8888:80"
+      # - "127.0.0.1:8888:80"
+    networks:
+      - app-network
+  
+  nginx:
+    depends_on:
+      - wordpress
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/:/etc/nginx/conf.d/
+    networks:
+      - app-network
+  
+networks:
+  app-network:
+    driver: bridge

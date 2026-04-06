@@ -1,0 +1,6 @@
+.env
+
+/app/uploads
+/postgresql
+/wordpress
+/*__pycache__
