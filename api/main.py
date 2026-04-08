@@ -6,6 +6,8 @@ from fastapi.staticfiles import StaticFiles
 from api.database.database import engine, Base
 from api.routers import user
 
+
+
 app = FastAPI(
     title="REST API для ...",
     description="Описание",

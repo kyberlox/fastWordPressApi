@@ -1,16 +1,17 @@
 services:
+
   postgres:
     image: postgres:16.2
     container_name: postgres
     environment:
-      POSTGRES_DB: "wordpress"
+      POSTGRES_DB: ${dbname}
       POSTGRES_USER: ${user}
       POSTGRES_PASSWORD: ${pswd}
     volumes:
       - ./postgresql/data:/var/lib/postgresql/data
       #- ./app_logs/postgers/:/var/log/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${user} -d wordpress"]
+      test: ["CMD-SHELL", "pg_isready -U ${user} -d ${dbname}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,6 +34,28 @@ services:
       # - "127.0.0.1:8000:8000"
     networks:
       - app-network
+  
+  mysql: # Переименуем для соответствия стандартам WP
+    image: mysql:9.6.0
+    container_name: mysql
+    environment:
+      MYSQL_DATABASE: ${dbname}
+      MYSQL_USER: ${user}
+      MYSQL_PASSWORD: ${pswd}
+      # Очень важно для целостности данных
+      MYSQL_ROOT_PASSWORD: ${pswd}
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost", "-u${user}", "-p${pswd}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "3306:3306"
+      #- "127.0.0.1:3306:3306"
+    networks:
+      - app-network
 
   wordpress:
     depends_on:
@@ -40,19 +63,19 @@ services:
         condition: service_healthy
       fastapi:
         condition: service_started
-    image: wordpress:latest
+    image: wordpress:6.9.4-php8.2-apache
     container_name: wordpress
     # restart: always
     environment:
-      WORDPRESS_DB_HOST: postgres:5432
+      WORDPRESS_DB_HOST: mysql:3306
       WORDPRESS_DB_USER: ${user}
       WORDPRESS_DB_PASSWORD: ${pswd}
-      WORDPRESS_DB_NAME: wordpress
-    # volumes:
-    #   - ./wordpress:/var/www/html
+      WORDPRESS_DB_NAME: ${dbname}
+    volumes:
+      - ./wordpress:/var/www/html
     ports:
-      - "8888:80"
-      # - "127.0.0.1:8888:80"
+      - "9000:80"
+      # - "127.0.0.1:9000:80"
     networks:
       - app-network
   
@@ -61,13 +84,16 @@ services:
       - wordpress
     image: nginx:latest
     container_name: nginx
+    environment:
+      - DOMAIN=${DOMAIN}
     ports:
       - "80:80"
     volumes:
       - ./nginx/:/etc/nginx/conf.d/
+      - ./wordpress:/var/www/html
     networks:
       - app-network
-  
+
 networks:
   app-network:
     driver: bridge
