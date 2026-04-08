@@ -35,7 +35,7 @@ services:
     networks:
       - app-network
   
-  mysql: # Переименуем для соответствия стандартам WP
+  db:
     image: mysql:9.6.0
     container_name: mysql
     environment:

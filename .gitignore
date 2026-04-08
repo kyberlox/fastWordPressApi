@@ -3,4 +3,4 @@
 /app/uploads
 /postgresql
 /wordpress
-/*__pycache__
+*/__pycache__/
