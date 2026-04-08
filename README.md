@@ -15,9 +15,9 @@
 │   ├── routers/           # Маршруты API
 │   ├── schemas/           # Pydantic схемы
 │   └── utils/             # Вспомогательные утилиты
-├── wordpress/             # WordPress установка
+├── wordpress/             # Файлы WordPress (volume отключён по умолчанию)
 │   ├── wp-config.php      # Конфигурация WordPress
-│   ├── wp-content/        # Темы, плагины, загрузки
+│   ├── wp-content/        # Темы, плагины, загрузки (если volume включён)
 │   └── ...                # Остальные файлы WordPress
 ├── nginx/                 # Конфигурация Nginx
 │   └── app.conf           # Виртуальный хост
@@ -84,6 +84,8 @@ FastAPI доступен по пути `/api`. Примеры эндпоинто
 
 ### Переменные окружения (.env)
 
+Файл `.env` не обязателен — все переменные имеют значения по умолчанию. Однако для кастомизации рекомендуется создать `.env` из `.env.example`:
+
 ```
 user=user
 pswd=1234
@@ -92,13 +94,17 @@ DOMAIN=localhost
 HOST=localhost
 ```
 
+- `user`, `pswd` — учётные данные PostgreSQL (также используются WordPress и FastAPI).
+- `dbname` — имя базы данных (по умолчанию `wordpress`).
+- `DOMAIN`, `HOST` — используются в конфигурации Nginx (по умолчанию `localhost`).
+
 ### Проксирование Nginx
 
-Nginx настроен так:
-- Запросы к `/` → WordPress (порт 8888)
-- Запросы к `/api/` → FastAPI (порт 8000)
+Nginx выступает обратным прокси для WordPress и FastAPI:
+- Запросы к `/` → WordPress (контейнер `wordpress`, порт 80)
+- Запросы к `/api/` → FastAPI (контейнер `fastapi`, порт 8000)
 
-Конфигурация находится в `nginx/app.conf`.
+WordPress доступен извне по порту `8888` (маппинг `8888:80`), но через Nginx используется внутреннее соединение `http://wordpress`. Конфигурация находится в `nginx/app.conf`.
 
 ### Расширение FastAPI
 
@@ -114,14 +120,14 @@ Nginx настроен так:
 
 Для FastAPI включён режим `--reload` в Dockerfile. Изменения в коде `api/` автоматически перезагружают сервер.
 
-Для WordPress изменения в `wordpress/` синхронизируются через volume.
+Для WordPress по умолчанию volume отключён (чтобы избежать конфликтов с правами). Чтобы сохранять изменения тем и плагинов, раскомментируйте строку `volumes:` в `docker-compose.yaml` (секция `wordpress`) и убедитесь, что каталог `wordpress/` существует и имеет правильные права.
 
 ### Доступ к базе данных
 
 - Хост: `postgres`
 - Порт: `5432`
-- База данных: `wordpress` (для WordPress) и `pdb` (для FastAPI, если настроено)
-- Пользователь/пароль: из `.env`
+- База данных: `wordpress` (используется и WordPress, и FastAPI)
+- Пользователь/пароль: из `.env` (по умолчанию `user`/`1234`)
 
 ### Остановка и очистка
 
@@ -129,6 +135,25 @@ Nginx настроен так:
 docker-compose down          # остановить контейнеры
 docker-compose down -v       # остановить и удалить тома (данные БД будут потеряны)
 ```
+
+## Особенности и устранение проблем
+
+### WordPress не подключается к базе данных
+- Убедитесь, что контейнер PostgreSQL запущен и прошёл healthcheck (`docker-compose logs postgres`).
+- Если база данных `wordpress` не создана, удалите том PostgreSQL (`docker-compose down -v`) и перезапустите.
+- Проверьте, что переменные окружения `WORDPRESS_DB_USER`, `WORDPRESS_DB_PASSWORD`, `WORDPRESS_DB_NAME` соответствуют настройкам PostgreSQL.
+
+### Ошибка 502 Bad Gateway в Nginx
+- Убедитесь, что WordPress контейнер работает (`docker-compose ps`).
+- Проверьте конфигурацию Nginx (`nginx/app.conf`): `proxy_pass` должен быть `http://wordpress`.
+- Перезапустите Nginx: `docker-compose restart nginx`.
+
+### FastAPI не запускается (ImportError)
+- Убедитесь, что зависимости установлены (контейнер FastAPI пересобран).
+- Проверьте, что в `api/Dockerfile` указан правильный `PYTHONPATH` и точка входа `api.main:app`.
+
+### Сохранение данных WordPress
+По умолчанию volume для WordPress отключён. Чтобы сохранять темы, плагины и загрузки, раскомментируйте `volumes:` в `docker-compose.yaml` (секция `wordpress`) и убедитесь, что каталог `wordpress/` существует.
 
 ## Лицензия
 
